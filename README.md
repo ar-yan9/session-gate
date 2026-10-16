@@ -14,7 +14,7 @@ not a live Python backend. Do not enter your real email-service password.
 Install Python 3.11+ and Git. In a new terminal:
 
 ```powershell
-git clone https://github.com/ar-yan 9/session-gate.git
+git clone https://github.com/ar-yan9/session-gate.git
 cd session-gate
 py -3.11 -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
