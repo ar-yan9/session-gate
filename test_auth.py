@@ -93,6 +93,10 @@ def test_csrf_origin_host_and_cookie(env):
     )
     assert c.get("/api/session", headers={"Host": "evil.invalid"}).status_code == 400
     assert c.get("/").headers["x-frame-options"] == "DENY"
+    assert (
+        c.get("/").headers["permissions-policy"]
+        == "camera=(), microphone=(), geolocation=()"
+    )
     assert "script-src 'self'" in c.get("/").headers["content-security-policy"]
 
 
