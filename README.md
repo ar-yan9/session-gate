@@ -23,8 +23,7 @@ py -3.11 -m venv .venv
 
 Open **http://127.0.0.1:8000**. Keep that exact address, not `localhost`, so the
 configured origin and browser cookie match. No Node, Docker, MySQL install or
-virtual machine is needed. On an 8 GB laptop, close heavy apps; this has not been
-benchmarked on your machine. Stop the server with Ctrl+C.
+virtual machine is needed. Stop the server with Ctrl+C.
 
 1. Choose **Create account**. Enter a fake lab email, name and 12-128 character
    unique passphrase. Example address: `learner@example.com`. No seeded account.
@@ -63,7 +62,8 @@ browser tests supplement API tests; CI does not claim full browser coverage.
 - HttpOnly, SameSite=Strict cookie. Local HTTP deliberately has Secure **off**;
   HTTPS configuration requires Secure **on**, with HSTS. No localStorage tokens.
 - Session-bound CSRF header on **every POST**, including login/registration;
-  same-origin checks, no CORS allowlist and restrictive script policy.
+  same-origin checks, no CORS allowlist, restrictive script policy and a
+  Permissions-Policy that disables camera, microphone and geolocation.
 - Persistent, atomic, fixed 10-minute limits: five login attempts per normalized
   email,20 per client IP,10 registrations per IP;60 new anonymous sessions per IP.
   All admitted login attempts count, including successful ones.429 includes
