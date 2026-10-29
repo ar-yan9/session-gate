@@ -25,7 +25,8 @@ same-origin JavaScript. This does not defeat XSS or a compromised browser.
   a nonbrowser client is allowed only with a valid cookie + CSRF pair.
 - Exact configured hostname check. No permissive CORS. Browser code uses safe
   text insertion and external same-origin scripts only; CSP forbids inline
-  scripts, objects, framing and foreign connections.
+  scripts, objects, framing and foreign connections. Permissions-Policy disables
+  camera, microphone and geolocation because this app does not use them.
 - Persistent fixed-window account/IP attempt counters use BEGIN IMMEDIATE,
   so concurrent requests share one admission decision. Expired counters and
   sessions are pruned on writes. This bounds lifetime, not total disk at scale.
