@@ -73,6 +73,10 @@ browser tests supplement API tests; CI does not claim full browser coverage.
   uses 64 MiB configured memory. Total app RAM has not been measured here.
 - Name/email/password validation;4 KiB POST body cap; no password reflection in
   validation errors. Names are rendered with textContent, not HTML.
+- Registration rejects a small built-in list of very common passphrases and
+  single-character repeats (case-insensitive). Login never uses this list, so
+  existing accounts cannot be locked out by it. It is not breached-password
+  screening against any corpus.
 
 This is defense in depth, not proof against every attack. Rate limits can be
 abused to temporarily block a known account; distributed abuse needs a different
