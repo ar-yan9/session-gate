@@ -26,6 +26,24 @@ hasher = PasswordHasher(time_cost=2, memory_cost=65536, parallelism=1)
 # Unknown-account login also verifies an Argon2id hash. Not a constant-time claim.
 DUMMY_HASH = hasher.hash(secrets.token_urlsafe(32))
 
+# Tiny built-in list of very common choices that pass the length rule, checked
+# case-insensitively at registration only. This is not breached-password
+# screening against any corpus; it just refuses the most obvious picks.
+COMMON_PASSWORDS = {
+    "password1234",
+    "password12345",
+    "password123456",
+    "qwertyqwerty",
+    "qwerty123456",
+    "123456789012",
+    "iloveyou1234",
+    "letmein12345",
+    "welcome123456",
+    "adminadmin123",
+    "abcabcabcabc",
+    "111111111111",
+}
+
 
 def digest(value):
     return hashlib.sha256(value.encode()).hexdigest()
@@ -64,6 +82,14 @@ class Registration(Credentials):
         value = value.strip()
         if not value or any(ord(c) < 32 for c in value):
             raise ValueError("Enter a display name")
+        return value
+
+    @field_validator("password")
+    @classmethod
+    def uncommon_password(cls, value):
+        # Registration only: the login model must not reject existing accounts.
+        if value.lower() in COMMON_PASSWORDS or len(set(value)) == 1:
+            raise ValueError("Choose a less common passphrase")
         return value
 
 
