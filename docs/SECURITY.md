@@ -35,7 +35,9 @@ same-origin JavaScript. This does not defeat XSS or a compromised browser.
 
 ## Deliberate limits
 
-Not independently audited. No password reset/change, verified email, MFA,
+Not independently audited. Registration refuses a small built-in list of very
+common passphrases and single-character repeats; that is not breached-password
+screening. No password reset/change, verified email, MFA,
 passkeys, breached-password screening, global logout, admin panel, distributed
 rate limiting, bot defense, TLS termination, deployment monitoring or database
 encryption. Email format validation does not prove address ownership. Duplicate
