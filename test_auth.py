@@ -296,3 +296,43 @@ def test_forwarded_headers_do_not_split_rate_bucket(env):
         )
         assert r.status_code == 401
     assert login(c, csrf, email="missing@example.com").status_code == 429
+
+
+def test_common_password_rejected_at_registration_only(env):
+    c, db, _, _ = env
+    csrf = boot(c)
+    for weak in ("password1234", "Password1234", "QWERTYQWERTY"):
+        response = post(
+            c,
+            "register",
+            {"email": "learner@example.com", "name": "Lab Learner", "password": weak},
+            csrf,
+        )
+        assert response.status_code == 422
+        assert weak not in json.dumps(response.json())
+    with db.connect() as conn:
+        assert conn.execute("SELECT COUNT(*) AS c FROM users").fetchone()["c"] == 0
+    # Login validation is unchanged: the same string reaches authentication
+    # and fails as unknown account (401), never a 422 validation rejection.
+    response = post(
+        c,
+        "login",
+        {"email": "learner@example.com", "password": "password1234"},
+        csrf,
+    )
+    assert response.status_code == 401
+
+
+def test_single_character_password_rejected(env):
+    c, db, _, _ = env
+    csrf = boot(c)
+    response = post(
+        c,
+        "register",
+        {"email": "learner@example.com", "name": "Lab Learner", "password": "a" * 12},
+        csrf,
+    )
+    assert response.status_code == 422
+    assert ("a" * 12) not in json.dumps(response.json())
+    with db.connect() as conn:
+        assert conn.execute("SELECT COUNT(*) AS c FROM users").fetchone()["c"] == 0
