@@ -6,7 +6,7 @@ No third-party scripts, analytics, cloud database or paid service.
 
 **Learning project, not a production identity provider or a security certification.**
 Use fake lab accounts and a unique test passphrase. It does not send email, verify
-address ownership, reset passwords or support MFA. GitHub hosts the source,
+address ownership, reset forgotten passwords or support MFA. GitHub hosts the source,
 not a live Python backend. Do not enter your real email-service password.
 
 ## Run on Windows
@@ -30,7 +30,9 @@ virtual machine is needed. Stop the server with Ctrl+C.
 2. Registration deliberately gives the same message for a new or existing email.
 3. Sign in with the account you created. Protected `/api/me` reads your identity.
 4. Refresh: the cookie still works until the 8-hour absolute server expiry.
-5. Sign out: the server deletes this session, so replaying that cookie fails.
+5. Signed in, you can change the password by re-entering the current one;
+   other sessions for the account are signed out on success.
+6. Sign out: the server deletes this session, so replaying that cookie fails.
 
 Database tables are created on first start in `local-data/auth.sqlite3`.
 They persist across restarts. To reset **your disposable lab data**, stop the
@@ -66,8 +68,15 @@ browser tests supplement API tests; CI does not claim full browser coverage.
   Permissions-Policy that disables camera, microphone and geolocation.
 - Persistent, atomic, fixed 10-minute limits: five login attempts per normalized
   email,20 per client IP,10 registrations per IP;60 new anonymous sessions per IP.
-  All admitted login attempts count, including successful ones.429 includes
+  Password changes are limited separately: five attempts per 10 minutes per
+  account. All admitted login and password-change attempts count, including
+  successful ones.429 includes
   Retry-After. Wait for the window; there is no permanent lockout.
+- Signed-in users can change their password with current-password
+  re-verification and the same uncommon-passphrase rules as registration. A
+  successful change revokes every other session for the account; the current
+  session stays signed in. There is no email-based reset: forgetting the
+  password means deleting the local lab data.
 - Two simultaneous memory-hard password operations at most, to bound this
   part of RAM use; excess concurrent requests return 503. Each Argon2 operation
   uses 64 MiB configured memory. Total app RAM has not been measured here.
