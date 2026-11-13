@@ -18,6 +18,10 @@ same-origin JavaScript. This does not defeat XSS or a compromised browser.
   concurrently. No passwords in logs, API responses or validation errors.
 - Eight-hour absolute authenticated expiry,30 min anonymous expiry, session
   rotation on login and SQL deletion on logout. No refresh tokens/JWT/localStorage.
+  Password change requires the signed-in session's CSRF token and the current
+  password, applies the registration uncommon-passphrase rules to the new one,
+  is limited to five attempts per 10 minutes per account, and on success
+  deletes every other session for the account (the current session stays).
 - HttpOnly,SameSite=Strict,Path=/ cookies. Secure is intentionally off for local
   HTTP; HTTPS requires Secure=true and adds HSTS. Config rejects remote HTTP.
 - All POSTs require JSON (4 KiB maximum actually read), matching session/CSRF,
@@ -37,8 +41,8 @@ same-origin JavaScript. This does not defeat XSS or a compromised browser.
 
 Not independently audited. Registration refuses a small built-in list of very
 common passphrases and single-character repeats; that is not breached-password
-screening. No password reset/change, verified email, MFA,
-passkeys, breached-password screening, global logout, admin panel, distributed
+screening. No reset flow for a forgotten password, verified email, MFA,
+passkeys, breached-password screening, standalone sign-out-everywhere, admin panel, distributed
 rate limiting, bot defense, TLS termination, deployment monitoring or database
 encryption. Email format validation does not prove address ownership. Duplicate
 registration uses a neutral response and login uses a dummy hash for unknown
