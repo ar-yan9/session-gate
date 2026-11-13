@@ -93,6 +93,27 @@ class Registration(Credentials):
         return value
 
 
+class PasswordChange(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    current_password: str = Field(min_length=1, max_length=128)
+    new_password: str = Field(min_length=12, max_length=128)
+
+    @field_validator("current_password", "new_password")
+    @classmethod
+    def no_null(cls, value):
+        if "\x00" in value:
+            raise ValueError("Password cannot contain a null character")
+        return value
+
+    @field_validator("new_password")
+    @classmethod
+    def uncommon_new_password(cls, value):
+        # Same registration-time list: the new password must not be an obvious pick.
+        if value.lower() in COMMON_PASSWORDS or len(set(value)) == 1:
+            raise ValueError("Choose a less common passphrase")
+        return value
+
+
 def create_app(
     db_path="local-data/auth.sqlite3",
     origin="http://127.0.0.1:8000",
@@ -301,6 +322,53 @@ def create_app(
             slots.release()
         token = issue(response, user["id"], old=current["token_hash"])
         return {"csrf": token, "user": {"name": user["name"], "email": user["email"]}}
+
+    @app.post("/api/account/password")
+    def change_password(body: PasswordChange, request: Request):
+        current = csrf(request)
+        if not current["user_id"]:
+            raise HTTPException(401, "Sign in required.")
+        # Same shape as the login account limit: five attempts per 10 minutes,
+        # counting every admitted attempt, successful or not.
+        retry = db.consume(
+            [("password-change:" + digest(current["email"]), 5)], int(clock())
+        )
+        if retry:
+            raise HTTPException(
+                429,
+                "Too many attempts. Try again later.",
+                headers={"Retry-After": str(retry)},
+            )
+        if not slots.acquire(blocking=False):
+            raise HTTPException(503, "Server busy. Try again shortly.")
+        try:
+            with db.connect() as conn:
+                user = conn.execute(
+                    "SELECT * FROM users WHERE id=?", (current["user_id"],)
+                ).fetchone()
+            verified = False
+            if user:
+                try:
+                    verified = hasher.verify(
+                        user["password_hash"], body.current_password
+                    )
+                except (VerifyMismatchError, VerificationError, InvalidHashError):
+                    verified = False
+            if not verified:
+                raise HTTPException(401, "Current password is incorrect.")
+            with db.connect() as conn:
+                conn.execute(
+                    "UPDATE users SET password_hash=? WHERE id=?",
+                    (hasher.hash(body.new_password), user["id"]),
+                )
+                # Other sessions die; this one stays signed in.
+                conn.execute(
+                    "DELETE FROM sessions WHERE user_id=? AND token_hash!=?",
+                    (user["id"], current["token_hash"]),
+                )
+        finally:
+            slots.release()
+        return {"message": "Password changed. Other sessions were signed out."}
 
     @app.get("/api/me")
     def me(request: Request):
