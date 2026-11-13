@@ -49,6 +49,15 @@ $('auth-form').onsubmit = async (event) => {
   } catch (error) { message(error.message, true); }
   finally { busy = false; $('submit').disabled = false; }
 };
+$('password-form').onsubmit = async (event) => {
+  event.preventDefault(); if (busy) return; busy = true; $('password-submit').disabled = true; message('Working…');
+  try {
+    const result = await api('account/password', { current_password: $('current-password').value, new_password: $('new-password').value });
+    $('current-password').value = ''; $('new-password').value = '';
+    message(result.message);
+  } catch (error) { message(error.message, true); }
+  finally { busy = false; $('password-submit').disabled = false; }
+};
 $('logout').onclick = async () => {
   $('logout').disabled = true;
   try { await api('logout', {}); await bootstrap(); message('Signed out. Server session revoked.'); }
