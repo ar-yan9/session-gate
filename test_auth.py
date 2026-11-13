@@ -336,3 +336,93 @@ def test_single_character_password_rejected(env):
     assert ("a" * 12) not in json.dumps(response.json())
     with db.connect() as conn:
         assert conn.execute("SELECT COUNT(*) AS c FROM users").fetchone()["c"] == 0
+
+
+NEW_PASSWORD = "new synthetic passphrase 98!"
+
+
+def change_password(client, csrf, current, new):
+    return post(
+        client, "account/password", {"current_password": current, "new_password": new}, csrf
+    )
+
+
+def test_change_password_flow(env):
+    c, db, _, _ = env
+    csrf = boot(c)
+    assert register(c, csrf).status_code == 200
+    csrf = login(c, csrf).json()["csrf"]
+    response = change_password(c, csrf, PASSWORD, NEW_PASSWORD)
+    assert response.status_code == 200
+    assert "signed out" in response.json()["message"]
+    assert login(c, csrf, password=PASSWORD).status_code == 401
+    assert login(c, csrf, password=NEW_PASSWORD).status_code == 200
+    with db.connect() as conn:
+        user = conn.execute("SELECT * FROM users").fetchone()
+        assert hasher.verify(user["password_hash"], NEW_PASSWORD)
+        assert NEW_PASSWORD not in json.dumps(dict(user))
+
+
+def test_change_password_wrong_current_and_csrf(env):
+    c, _, _, _ = env
+    csrf = boot(c)
+    register(c, csrf)
+    csrf = login(c, csrf).json()["csrf"]
+    response = change_password(c, csrf, "wrong current password", NEW_PASSWORD)
+    assert response.status_code == 401
+    assert response.json()["detail"] == "Current password is incorrect."
+    assert (
+        post(
+            c,
+            "account/password",
+            {"current_password": PASSWORD, "new_password": NEW_PASSWORD},
+            "wrong",
+        ).status_code
+        == 403
+    )
+    assert login(c, csrf).status_code == 200
+
+
+def test_change_password_requires_account_session(env):
+    c, _, _, app = env
+    with TestClient(app) as anon:
+        csrf = boot(anon)
+        assert change_password(anon, csrf, PASSWORD, NEW_PASSWORD).status_code == 401
+
+
+def test_change_password_validation(env):
+    c, _, _, _ = env
+    csrf = boot(c)
+    register(c, csrf)
+    csrf = login(c, csrf).json()["csrf"]
+    assert change_password(c, csrf, PASSWORD, "password12345").status_code == 422
+    assert change_password(c, csrf, PASSWORD, "short").status_code == 422
+    assert login(c, csrf).status_code == 200
+
+
+def test_change_password_revokes_other_sessions(env):
+    c, db, _, app = env
+    csrf = boot(c)
+    register(c, csrf)
+    csrf = login(c, csrf).json()["csrf"]
+    with TestClient(app) as second:
+        second_csrf = boot(second)
+        login(second, second_csrf)
+        assert second.get("/api/me").status_code == 200
+        assert change_password(c, csrf, PASSWORD, NEW_PASSWORD).status_code == 200
+        assert second.get("/api/me").status_code == 401
+    assert c.get("/api/me").status_code == 200
+    with db.connect() as conn:
+        assert conn.execute("SELECT COUNT(*) AS c FROM sessions").fetchone()["c"] == 1
+
+
+def test_change_password_rate_limit(env):
+    c, _, _, _ = env
+    csrf = boot(c)
+    register(c, csrf)
+    csrf = login(c, csrf).json()["csrf"]
+    for _ in range(5):
+        assert change_password(c, csrf, "wrong current password", NEW_PASSWORD).status_code == 401
+    blocked = change_password(c, csrf, "wrong current password", NEW_PASSWORD)
+    assert blocked.status_code == 429
+    assert blocked.headers["Retry-After"].isdigit()
