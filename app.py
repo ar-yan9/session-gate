@@ -22,6 +22,7 @@ ROOT = Path(__file__).parent
 COOKIE = "session_gate"
 SESSION_SECONDS = 8 * 3600
 ANON_SECONDS = 1800
+MAX_SESSIONS_PER_ACCOUNT = 8
 hasher = PasswordHasher(time_cost=2, memory_cost=65536, parallelism=1)
 # Unknown-account login also verifies an Argon2id hash. Not a constant-time claim.
 DUMMY_HASH = hasher.hash(secrets.token_urlsafe(32))
@@ -221,6 +222,20 @@ def create_app(
             conn.execute("DELETE FROM sessions WHERE expires_at<=?", (int(clock()),))
             if old:
                 conn.execute("DELETE FROM sessions WHERE token_hash=?", (old,))
+            if user_id is not None:
+                # Bound concurrent sessions per account; the oldest die first.
+                count = conn.execute(
+                    "SELECT COUNT(*) AS n FROM sessions WHERE user_id=?",
+                    (user_id,),
+                ).fetchone()["n"]
+                excess = count - (MAX_SESSIONS_PER_ACCOUNT - 1)
+                if excess > 0:
+                    conn.execute(
+                        "DELETE FROM sessions WHERE token_hash IN ("
+                        "SELECT token_hash FROM sessions WHERE user_id=? "
+                        "ORDER BY expires_at, token_hash LIMIT ?)",
+                        (user_id, excess),
+                    )
             conn.execute(
                 "INSERT INTO sessions VALUES(?,?,?,?)",
                 (digest(token), user_id, csrf_token, int(clock()) + ttl),
