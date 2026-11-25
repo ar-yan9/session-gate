@@ -4,7 +4,7 @@ import sqlite3
 from concurrent.futures import ThreadPoolExecutor
 import pytest
 from fastapi.testclient import TestClient
-from app import create_app, COOKIE, hasher
+from app import create_app, COOKIE, MAX_SESSIONS_PER_ACCOUNT, hasher
 from database import Database
 
 PASSWORD = "synthetic test passphrase 47!"
@@ -426,3 +426,64 @@ def test_change_password_rate_limit(env):
     blocked = change_password(c, csrf, "wrong current password", NEW_PASSWORD)
     assert blocked.status_code == 429
     assert blocked.headers["Retry-After"].isdigit()
+def test_session_cap_evicts_oldest(env):
+    c, db, now, app = env
+    csrf = boot(c)
+    register(c, csrf)
+    csrf = login(c, csrf).json()["csrf"]
+    clients = []
+    for n in range(MAX_SESSIONS_PER_ACCOUNT - 1):
+        now[0] += 1  # distinct expires_at, so oldest-first eviction is deterministic
+        if (n + 1) % 4 == 0:
+            now[0] += 601  # fresh fixed window: five logins per account per 10 min
+        extra = TestClient(app)
+        login(extra, boot(extra))
+        assert extra.get("/api/me").status_code == 200
+        clients.append(extra)
+    with db.connect() as conn:
+        count = conn.execute(
+            "SELECT COUNT(*) AS c FROM sessions WHERE user_id IS NOT NULL"
+        ).fetchone()["c"]
+        assert count == MAX_SESSIONS_PER_ACCOUNT
+    now[0] += 601
+    extra = TestClient(app)
+    login(extra, boot(extra))
+    assert extra.get("/api/me").status_code == 200
+    assert c.get("/api/me").status_code == 401  # the oldest session died first
+    assert clients[-1].get("/api/me").status_code == 200
+    with db.connect() as conn:
+        count = conn.execute(
+            "SELECT COUNT(*) AS c FROM sessions WHERE user_id IS NOT NULL"
+        ).fetchone()["c"]
+        assert count == MAX_SESSIONS_PER_ACCOUNT
+
+
+def test_session_cap_counts_per_account(env):
+    c, db, now, app = env
+    csrf = boot(c)
+    register(c, csrf)
+    login(c, csrf)
+    for n in range(MAX_SESSIONS_PER_ACCOUNT - 1):
+        if (n + 1) % 4 == 0:
+            now[0] += 601
+        extra = TestClient(app)
+        login(extra, boot(extra))
+    now[0] += 601
+    second = TestClient(app)
+    csrf2 = boot(second)
+    register(second, csrf2, email="second@example.com")
+    assert login(second, csrf2, email="second@example.com").status_code == 200
+    assert second.get("/api/me").json()["email"] == "second@example.com"
+    now[0] += 601
+    extra = TestClient(app)
+    login(extra, boot(extra))
+    with db.connect() as conn:
+        rows = conn.execute(
+            "SELECT u.email, COUNT(*) AS c FROM sessions s "
+            "JOIN users u ON u.id=s.user_id GROUP BY u.email"
+        ).fetchall()
+        counts = {row["email"]: row["c"] for row in rows}
+    assert counts == {
+        "learner@example.com": MAX_SESSIONS_PER_ACCOUNT,
+        "second@example.com": 1,
+    }
