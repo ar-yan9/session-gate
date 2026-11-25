@@ -61,6 +61,8 @@ browser tests supplement API tests; CI does not claim full browser coverage.
   for later recovery. Rehash-on-login when parameters change.
 - Random opaque session cookie. Only its SHA-256 digest is stored in SQL.
   Login rotates the anonymous session ID and CSRF token; logout revokes it.
+  Each account holds at most eight concurrent sessions; a login past the cap
+  evicts the oldest session first.
 - HttpOnly, SameSite=Strict cookie. Local HTTP deliberately has Secure **off**;
   HTTPS configuration requires Secure **on**, with HSTS. No localStorage tokens.
 - Session-bound CSRF header on **every POST**, including login/registration;
