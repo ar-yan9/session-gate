@@ -18,6 +18,8 @@ same-origin JavaScript. This does not defeat XSS or a compromised browser.
   concurrently. No passwords in logs, API responses or validation errors.
 - Eight-hour absolute authenticated expiry,30 min anonymous expiry, session
   rotation on login and SQL deletion on logout. No refresh tokens/JWT/localStorage.
+  Each account is capped at eight concurrent sessions; logins past the cap
+  evict the oldest sessions first.
   Password change requires the signed-in session's CSRF token and the current
   password, applies the registration uncommon-passphrase rules to the new one,
   is limited to five attempts per 10 minutes per account, and on success
